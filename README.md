@@ -1,1 +1,1 @@
-# Mtg-Melee-Data
+Developed for decklists and statistics for Mtg Melee tournaments
