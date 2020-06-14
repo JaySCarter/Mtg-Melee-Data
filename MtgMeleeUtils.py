@@ -1,16 +1,19 @@
+### Packages
 import ezsheets
-from pathlib import Path
-import time
-from os import listdir
-import numpy as np
 import requests
 from bs4 import BeautifulSoup
 import re
 import pandas as pd
 import random
+import csv
+
+### Other stuff to import ###
+from pathlib import Path
+import time
+from os import listdir
+import numpy as np
 import shutil
 import datetime
-import csv
 from collections import defaultdict
 from collections import OrderedDict
 from pprint import pprint
@@ -48,14 +51,6 @@ def most_played_cards_to_df(path, decklist_file, dataframe_flag=False, files_to_
         print("Returning All by Default")
         files_to_return_all_flag = True
 
-    # print(decklist_df.head(10).to_string())
-    #
-    # print(
-    #     decklist_df.groupby(['Card']).size().to_frame('size').reset_index().sort_values(['Card'], ascending=False).head(
-    #         15))
-    # print(decklist_df.groupby(['Card']).size().head(15))
-    # print("\n\n\n\n")
-
     decklist_df_sorted = decklist_df.copy()
     most_played_cards = decklist_df_sorted.groupby(['Card'])['Sideboard'] \
         .size().reset_index(name='Total') \
@@ -82,15 +77,48 @@ def most_played_cards_to_df(path, decklist_file, dataframe_flag=False, files_to_
         print("Problem")
         return None
 
+
+def get18s(sheet, all_standings=False):
+    ss = ezsheets.Spreadsheet(sheet)
+    print(ss.title)
+    print(ss.sheetTitles)
+    players = ss['Player Results'].getColumn('I')
+    points = ss['Player Results'].getColumn('J')
+
+    listOfLists = [players, points]
+
+    players = [x for x in players if x]
+    points = [x for x in points if x]
+    players.pop(0)
+    points.pop(0)
+    print(players, "\n", points)
+    some_tuples = list(zip(players, points))
+    df_results = pd.DataFrame(some_tuples, columns=['Players', 'Points'])
+    df_results['Results'] = pd.to_numeric(df_results['Points'])
+    for i in range(len(df_results['Points'])):
+        df_results['Points'][i] = int(df_results['Points'][i])
+
+    df_18_plus = df_results[df_results['Points'] > 18]
+    # print(type(df_results['Points'][0]))
+    players_18_plus = list(df_18_plus['Players'])
+    # print(players_18_plus)
+
+    if all_standings is True:
+        return df_results
+    else:
+        return players_18_plus
+
+
 def decklist_to_file(filename, decklist_df, extension='csv', path=None):
     if extension.lower().find('csv') > 0:
         separator = ','
     elif extension.lower().find('txt') > 0:
         separator = ' '
 
-    decklist_df.to_csv('{0}tournament_{1}_deck_{2}.{3}'.    \
-                       format(path, filename, extension),   \
+    decklist_df.to_csv('{0}tournament_{1}_deck_{2}.{3}'. \
+                       format(path, filename, extension), \
                        header=None, index=None, sep=separator, mode='a')
+
 
 def get_list_of_decklists(sheet):
     '''
@@ -111,9 +139,11 @@ def get_list_of_decklists(sheet):
 
     return decklist_numbers
 
+
 def expand_decklist(decklist_dataframe):
     decklist_to_return = decklist_dataframe.reindex(decklist_dataframe.index.repeat(decklist_dataframe['Qty']))
     return decklist_to_return
+
 
 def get_individual_decklist(list_number, player_id=None):
     '''
@@ -257,6 +287,60 @@ def get_individual_decklist(list_number, player_id=None):
 
     return decklist_df
 
+
+def streamdecker_text_files(path, csvOfDecklists):
+    '''
+    Takes csv of all decklists and splits them out into individual txt files for StreamDecker Upload
+    :param path: Where the decklist csv is
+    :param csvOfDecklists: Name of decklist csv (includes ".csv")
+    :return: None
+    '''
+    decklist_file_expanded = '{0}{1}'.format(path, csvOfDecklists)
+    # print(decklist_file_expanded)
+
+    df = pd.read_csv(decklist_file_expanded)
+    player_names = df['Player_Name'].unique()
+    # print(player_names)
+
+    for player in player_names:
+        # print(player)
+        dontstrip = [' ', '_', '-']
+        player_name_for_file_name = "".join(c for c in player if c.isalnum() or c in dontstrip).rstrip()
+
+        single_deck_df_main = df.copy()
+        single_deck_df_sb = df.copy()
+
+        single_deck_df_main = single_deck_df_main[(single_deck_df_main['Player_Name'] == player) &
+                                                  (single_deck_df_main['Sideboard'] == 0) &
+                                                  (single_deck_df_main['Companion'] == 0)]
+
+        single_deck_df_sb = single_deck_df_sb[(single_deck_df_sb['Player_Name'] == player) &
+                                              (single_deck_df_sb['Sideboard'] == 1) &
+                                              (single_deck_df_sb['Companion'] == 0)]
+
+        # print(single_deck_df_main.head(2).to_string())
+        # print(single_deck_df_sb.head(2).to_string())
+
+        compressed_df_main = single_deck_df_main.groupby(['Card']) \
+                                 .size().reset_index(name='Number').iloc[:, ::-1]
+        compressed_df_sb = single_deck_df_sb.groupby(['Card']) \
+                               .size().reset_index(name='Number').iloc[:, ::-1]
+
+        ###Trying writing rows at a time
+        # print(compressed_df_main.to_string())
+        with open('{0}{1}_deck.txt'.format(path, player_name_for_file_name), 'w', newline='') as deckfile:
+            line_writer = csv.writer(deckfile, delimiter=' ')
+
+            for i in range(len(compressed_df_main)):
+                deckfile.write('{0} {1}\n'.format(compressed_df_main['Number'][i], compressed_df_main['Card'][i]))
+            deckfile.write("\nSideboard\n")
+            for i in range(len(compressed_df_sb)):
+                deckfile.write('{0} {1}\n'.format(compressed_df_sb['Number'][i], compressed_df_sb['Card'][i]))
+
+        print("Completed Streamdecker Lists")
+
+### The rest of these aren't done
+
 def mtgmeleemakeid():
     seed = 5759
     base = 1000000000
@@ -267,6 +351,7 @@ def mtgmeleemakeid():
 
     return newid
 
+
 def mtgmeleecheckid(new_id=None, id_db=None, name=None, username=None):
     result = False  # Defaults to the ID is not in the database
     if new_id is None:
@@ -276,6 +361,7 @@ def mtgmeleecheckid(new_id=None, id_db=None, name=None, username=None):
         # print(result)
     result_tuple = (result, new_id, name, username)
     return result_tuple
+
 
 def mtgmeleeresults(sheet):
     ss = ezsheets.Spreadsheet(sheet)
@@ -310,11 +396,11 @@ def mtgmeleeresults(sheet):
 
     for i in range(len(resultsList)):
         if (playerOneList[i]) in resultsList[i]:
-            resultType[i]=1
+            resultType[i] = 1
         if (playerTwoList[i]) in resultsList[i]:
-            resultType[i]=2
-        if ('0-0-3')  in resultsList[i]:
-            resultType[i]=3
+            resultType[i] = 2
+        if ('0-0-3') in resultsList[i]:
+            resultType[i] = 3
         if 'was awarded' in resultsList[i]:
             resultType[i] = 4  ### Bye is code 4
 
@@ -322,6 +408,6 @@ def mtgmeleeresults(sheet):
     # print("Player 1 Wins: ", resultType.count(1), "\nPlayer 2 Wins: ", resultType.count(2), "\nDraws: ", resultType.count(3))
     # print("Byes: ", resultType.count(4), "\nLeft Over: ", resultType.count(-9))
 
-    results_df = pd.DataFrame(list(zip(tournamentIdList, roundList, playerOneList, playerTwoList, resultsList, resultType)),
-                              columns=['Tournament Id', 'Round', 'Player 1', 'Player 2', 'Result', 'Result Code'])
-
+    results_df = pd.DataFrame(
+        list(zip(tournamentIdList, roundList, playerOneList, playerTwoList, resultsList, resultType)),
+        columns=['Tournament Id', 'Round', 'Player 1', 'Player 2', 'Result', 'Result Code'])
