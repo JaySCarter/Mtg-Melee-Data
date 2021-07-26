@@ -1,5 +1,5 @@
 ### Packages
-import ezsheets
+#import ezsheets
 import requests
 from bs4 import BeautifulSoup
 import re
@@ -8,6 +8,7 @@ import random
 import csv
 
 ### Other stuff to import ###
+import ezsheets
 from pathlib import Path
 import time
 from os import listdir
@@ -338,6 +339,7 @@ def streamdecker_text_files(path, csvOfDecklists):
                 deckfile.write('{0} {1}\n'.format(compressed_df_sb['Number'][i], compressed_df_sb['Card'][i]))
 
         print("Completed Streamdecker Lists")
+
 
 ### The rest of these aren't done
 
